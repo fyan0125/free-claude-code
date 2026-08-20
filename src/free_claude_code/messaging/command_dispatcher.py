@@ -1,14 +1,23 @@
 """Command parsing and dispatch for messaging handlers."""
 
 from .command_context import MessagingCommandContext
-from .commands import handle_clear_command, handle_stats_command, handle_stop_command
+from .commands import (
+    handle_clear_command,
+    handle_fork_command,
+    handle_skills_command,
+    handle_stats_command,
+    handle_stop_command,
+)
 from .models import IncomingMessage
 
 _COMMAND_HANDLERS = {
     "/clear": handle_clear_command,
     "/stop": handle_stop_command,
     "/stats": handle_stats_command,
+    "/skills": handle_skills_command,
+    "/fork": handle_fork_command,
 }
+
 
 
 def parse_command_base(text: str | None) -> str:
@@ -27,5 +36,7 @@ async def dispatch_command(
     command = _COMMAND_HANDLERS.get(command_base)
     if command is None:
         return False
-    await command(context, incoming)
+    res = await command(context, incoming)
+    if res is False:
+        return False
     return True

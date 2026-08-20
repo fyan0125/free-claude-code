@@ -10,13 +10,15 @@ from free_claude_code.cli.desktop_assets import export_app_icon
 def launch(argv: Sequence[str] | None = None) -> None:
     """Export installer assets or launch the supported native tray adapter."""
 
-    args = tuple(sys.argv[1:] if argv is None else argv)
+    raw_args = tuple(sys.argv[1:] if argv is None else argv)
+    args = [a for a in raw_args if not a.startswith("-psn")]
     if len(args) == 2 and args[0] == "--export-icon":
         export_app_icon(Path(args[1]))
         return
     if args:
         print("Usage: fcc-desktop [--export-icon PATH]", file=sys.stderr)
         raise SystemExit(2)
+
     if sys.platform not in {"darwin", "win32"}:
         print("FCC Desktop is supported on Windows and macOS.", file=sys.stderr)
         raise SystemExit(1)

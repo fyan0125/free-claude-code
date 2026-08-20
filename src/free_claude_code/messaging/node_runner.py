@@ -228,11 +228,19 @@ class MessagingNodeRunner:
                 )
                 return
 
+            prompt_text = claim.prompt
+            should_fork = False
+            if prompt_text.strip().startswith("/fork"):
+                should_fork = True
+                parts = prompt_text.strip().split(maxsplit=1)
+                prompt_text = parts[1] if len(parts) > 1 else ""
+
             async for event_data in cli_session.start_task(
-                claim.prompt,
+                prompt_text,
                 session_id=parent_session_id,
-                fork_session=bool(parent_session_id),
+                fork_session=should_fork,
             ):
+
                 if not isinstance(event_data, dict):
                     logger.warning(
                         f"HANDLER: Non-dict event received: {type(event_data)}"

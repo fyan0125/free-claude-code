@@ -230,12 +230,13 @@ class MessagingTurnIntake:
             if reply_target.queue_position is not None:
                 return self._format_status(
                     "📋",
-                    "Queued",
-                    f"(position {reply_target.queue_position}) - waiting...",
+                    "排隊中",
+                    f"(第 {reply_target.queue_position} 位) - 請稍候...",
                 )
-            return self._format_status("🔄", "Continuing conversation...", None)
+            return self._format_status("🔄", "正在接續對話...", None)
 
-        return self._format_status("⏳", "Launching new Claude CLI instance...", None)
+        return self._format_status("⏳", "正在啟動 Claude CLI 進程...", None)
+
 
 
 __all__ = ["MessagingTurnIntake"]

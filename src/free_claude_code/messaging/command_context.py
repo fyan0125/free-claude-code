@@ -39,6 +39,8 @@ class MessagingCommandContext(Protocol):
 
     outbound: OutboundMessenger
     cli_manager: ManagedClaudeSessionManagerProtocol
+    session_store: Any
+
 
     def format_status(self, emoji: str, label: str, suffix: str | None = None) -> str:
         """Format a platform-specific status line."""

@@ -125,11 +125,11 @@ def launch_desktop(tray_factory: DesktopTrayFactory) -> None:
         return
 
     try:
+        # Do not exit if server is already running; still launch the desktop tray icon.
         if preflight_proxy(local_proxy_root_url(settings)) is None:
-            open_admin_when_ready(settings)
-            return
-
+            schedule_open_admin_browser(settings)
         supervisor = ServerSupervisor(console_logging=False)
+
 
         def open_current_admin() -> None:
             schedule_open_admin_browser(get_settings())
