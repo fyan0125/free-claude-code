@@ -409,7 +409,8 @@ def render_skills_page(page: int = 1) -> tuple[str, Any]:
     start_idx = (page - 1) * per_page
     page_skills = skills[start_idx : start_idx + per_page]
 
-    lines = [f"🧩 *已安裝技能列表 (第 {page}/{total_pages} 頁 - 共 {len(skills)} 個)*\n"]
+    title_text = escape_md_v2(f"已安裝技能列表 (第 {page}/{total_pages} 頁 - 共 {len(skills)} 個)")
+    lines = [f"🧩 *{title_text}*\n"]
 
     for s in page_skills:
         name = escape_md_v2(str(s["name"]))
@@ -421,7 +422,8 @@ def render_skills_page(page: int = 1) -> tuple[str, Any]:
 
         lines.append(f"• */{name}* {badge}\n  {desc}")
 
-    lines.append("\n💡 *提示：點擊下方按鈕翻頁，或發送 /skills <名稱> 查看規格。*")
+    tip_text = escape_md_v2("提示：點擊下方按鈕翻頁，或發送 /skills <名稱> 查看規格。")
+    lines.append(f"\n💡 *{tip_text}*")
 
     markup = None
     try:
@@ -502,6 +504,7 @@ def render_skill_detail(skill_name: str) -> tuple[str, Any]:
         pass
 
     return ("\n".join(lines), markup)
+
 
 
 async def handle_skills_command(
