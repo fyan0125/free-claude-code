@@ -10,10 +10,10 @@ from loguru import logger
 from ..limiter import MessagingRateLimiter
 
 SendOperation = Callable[
-    [str, str, str | None, str | None, str | None],
+    [str, str, str | None, str | None, str | None, Any],
     Awaitable[str],
 ]
-EditOperation = Callable[[str, str, str, str | None], Awaitable[None]]
+EditOperation = Callable[[str, str, str, str | None, Any], Awaitable[None]]
 DeleteManyOperation = Callable[[str, list[str]], Awaitable[None]]
 
 
@@ -43,6 +43,7 @@ class PlatformOutbox:
         parse_mode: str | None = None,
         fire_and_forget: bool = True,
         message_thread_id: str | None = None,
+        reply_markup: Any = None,
     ) -> str | None:
         """Queue or immediately send a platform message."""
         self._require_open()
@@ -54,6 +55,7 @@ class PlatformOutbox:
                 reply_to,
                 parse_mode,
                 message_thread_id,
+                reply_markup,
             )
 
         if fire_and_forget:
@@ -68,18 +70,20 @@ class PlatformOutbox:
         text: str,
         parse_mode: str | None = None,
         fire_and_forget: bool = True,
+        reply_markup: Any = None,
     ) -> None:
         """Queue or immediately edit a platform message."""
         self._require_open()
 
         async def _edit() -> None:
-            await self._edit(chat_id, message_id, text, parse_mode)
+            await self._edit(chat_id, message_id, text, parse_mode, reply_markup)
 
         dedup_key = f"edit:{chat_id}:{message_id}"
         if fire_and_forget:
             self._limiter.fire_and_forget(_edit, dedup_key=dedup_key)
         else:
             await self._limiter.enqueue(_edit, dedup_key=dedup_key)
+
 
     async def queue_delete_messages(
         self,

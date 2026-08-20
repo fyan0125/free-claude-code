@@ -28,6 +28,7 @@ try:
     from telegram import Update
     from telegram.ext import (
         Application,
+        CallbackQueryHandler,
         CommandHandler,
         ContextTypes,
         MessageHandler,
@@ -38,6 +39,7 @@ try:
     TELEGRAM_AVAILABLE = True
 except ImportError:
     TELEGRAM_AVAILABLE = False
+
 
 
 class TelegramRuntime:
@@ -142,6 +144,8 @@ class TelegramRuntime:
             MessageHandler(filters.COMMAND, self._on_telegram_message)
         )
         application.add_handler(MessageHandler(filters.VOICE, self._on_telegram_voice))
+        application.add_handler(CallbackQueryHandler(self._on_telegram_callback_query))
+
 
         await self._retry_connection_step(
             application.initialize,
@@ -298,3 +302,48 @@ class TelegramRuntime:
             queue_send_message=self.outbound.queue_send_message,
             queue_delete_messages=self.outbound.queue_delete_messages,
         )
+
+    async def _on_telegram_callback_query(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        query = update.callback_query
+        if not query:
+            return
+        with contextlib.suppress(Exception):
+            await query.answer()
+
+        data = query.data or ""
+        if data.startswith("skills_"):
+            chat = update.effective_chat
+            if not chat or not query.message:
+                return
+            chat_id = str(chat.id)
+            message_id = str(query.message.message_id)
+
+            if data.startswith("skills_page:"):
+                page_str = data.split(":", 1)[1]
+                if page_str.isdigit():
+                    from ..commands import render_skills_page
+
+                    page = int(page_str)
+                    text, markup = render_skills_page(page)
+                    await self.outbound.edit_message(
+                        chat_id=chat_id,
+                        message_id=message_id,
+                        text=text,
+                        parse_mode="MarkdownV2",
+                        reply_markup=markup,
+                    )
+            elif data.startswith("skills_detail:"):
+                skill_name = data.split(":", 1)[1]
+                from ..commands import render_skill_detail
+
+                text, markup = render_skill_detail(skill_name)
+                await self.outbound.edit_message(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    text=text,
+                    parse_mode="MarkdownV2",
+                    reply_markup=markup,
+                )
+

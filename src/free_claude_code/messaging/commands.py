@@ -8,6 +8,8 @@ from loguru import logger
 
 from .command_context import MessagingCommandContext
 from .models import IncomingMessage
+from .rendering.telegram_markdown import escape_md_v2
+
 
 
 def _get_session_summary(session_id: str, workspace: str) -> tuple[str, str]:
@@ -394,104 +396,138 @@ def _discover_installed_skills() -> list[dict[str, Any]]:
     return sorted(discovered.values(), key=lambda s: str(s["name"]).lower())
 
 
+def render_skills_page(page: int = 1) -> tuple[str, Any]:
+    """Render /skills paginated view with Telegram InlineKeyboardMarkup."""
+    skills = _discover_installed_skills()
+    if not skills:
+        return ("🧩 *已安裝技能列表*\n\n系統中未找到任何已安裝的技能。", None)
+
+    per_page = 10
+    total_pages = (len(skills) + per_page - 1) // per_page
+    page = max(1, min(page, total_pages)) if total_pages > 0 else 1
+
+    start_idx = (page - 1) * per_page
+    page_skills = skills[start_idx : start_idx + per_page]
+
+    lines = [f"🧩 *已安裝技能列表 (第 {page}/{total_pages} 頁 - 共 {len(skills)} 個)*\n"]
+
+    for s in page_skills:
+        name = escape_md_v2(str(s["name"]))
+        desc = escape_md_v2(str(s["description"]))
+        user_only = bool(s["user_only"])
+
+        badge_text = "👤 僅限使用者" if user_only else "🤖 模型可用"
+        badge = escape_md_v2(f"[{badge_text}]")
+
+        lines.append(f"• */{name}* {badge}\n  {desc}")
+
+    lines.append("\n💡 *提示：點擊下方按鈕翻頁，或發送 /skills <名稱> 查看規格。*")
+
+    markup = None
+    try:
+        from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
+        buttons = []
+        if page > 1:
+            buttons.append(
+                InlineKeyboardButton(
+                    "◀️ 上一頁", callback_data=f"skills_page:{page-1}"
+                )
+            )
+        buttons.append(
+            InlineKeyboardButton(
+                f"{page} / {total_pages}", callback_data="skills_noop"
+            )
+        )
+        if page < total_pages:
+            buttons.append(
+                InlineKeyboardButton(
+                    "下一頁 ▶️", callback_data=f"skills_page:{page+1}"
+                )
+            )
+        markup = InlineKeyboardMarkup([buttons])
+    except Exception:
+        pass
+
+    return ("\n".join(lines), markup)
+
+
+def render_skill_detail(skill_name: str) -> tuple[str, Any]:
+    """Render /skills <name> detail view with Telegram InlineKeyboardMarkup."""
+    skills = _discover_installed_skills()
+    target_name = skill_name.lower().lstrip("/")
+    target_skill = next(
+        (s for s in skills if str(s["name"]).lower() == target_name), None
+    )
+
+    if not target_skill:
+        return (f"❌ 找不到技能 '/{escape_md_v2(target_name)}'。", None)
+
+    name = escape_md_v2(str(target_skill["name"]))
+    desc = escape_md_v2(str(target_skill["description"]))
+    hint = escape_md_v2(str(target_skill.get("argument_hint", "")))
+    user_only = bool(target_skill["user_only"])
+    body = str(target_skill.get("body", ""))[:500]
+
+    badge_text = (
+        "👤 僅限使用者 (disable-model-invocation: true)"
+        if user_only
+        else "🤖 模型可用 (Model-invocable)"
+    )
+
+    lines = [
+        f"🧩 *技能詳細規格：/{name}*",
+        "",
+        "*權限狀態：* " + escape_md_v2(badge_text),
+        "*技能描述：* " + desc,
+    ]
+    if hint:
+        lines.append("*參數提示：* " + hint)
+    if body:
+        lines.extend(["", "*指引預覽：*", f"`{body}`"])
+
+    lines.extend(["", "💡 發送 Prompt 即刻開始。"])
+
+    markup = None
+    try:
+        from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
+        buttons = [
+            InlineKeyboardButton(
+                "🔙 返回技能列表", callback_data="skills_page:1"
+            )
+        ]
+        markup = InlineKeyboardMarkup([buttons])
+    except Exception:
+        pass
+
+    return ("\n".join(lines), markup)
+
+
 async def handle_skills_command(
     handler: MessagingCommandContext, incoming: IncomingMessage
 ) -> None:
-    """Handle /skills command with multi-layer navigation & detailed views."""
-    skills = _discover_installed_skills()
-    ctx = handler.get_render_ctx()
-
-    if not skills:
-        msg_text = "🧩 " + ctx.bold("Installed Skills") + "\n" + ctx.escape_text("No skills found on system.")
-        msg_id = await handler.outbound.queue_send_message(
-            incoming.chat_id,
-            msg_text,
-            fire_and_forget=False,
-            message_thread_id=incoming.message_thread_id,
-        )
-        handler.record_outgoing_message(
-            incoming.platform, incoming.chat_id, msg_id, "command"
-        )
-        return
-
+    """Handle /skills command with Inline Keyboard Buttons and detail views."""
     parts = (incoming.text or "").strip().split()
     sub_arg = parts[1] if len(parts) > 1 else None
 
-    # Check if sub_arg is a skill name (Layer 2: Detail view)
     if sub_arg is not None and not sub_arg.isdigit():
-        target_name = sub_arg.lower().lstrip("/")
-        target_skill = next((s for s in skills if str(s["name"]).lower() == target_name), None)
-
-        if target_skill:
-            name = str(target_skill["name"])
-            desc = str(target_skill["description"])
-            hint = str(target_skill.get("argument_hint", ""))
-            user_only = bool(target_skill["user_only"])
-            body = str(target_skill.get("body", ""))[:500]
-
-            badge_text = "👤 User-only (disable-model-invocation: true)" if user_only else "🤖 Model-invocable"
-
-            lines = [
-                "🧩 " + ctx.bold(f"Skill Detail: /{name}"),
-                "",
-                ctx.bold("Status:") + " " + ctx.escape_text(badge_text),
-                ctx.bold("Description:") + " " + ctx.escape_text(desc),
-            ]
-            if hint:
-                lines.append(ctx.bold("Argument Hint:") + " " + ctx.escape_text(hint))
-            if body:
-                lines.extend(["", ctx.bold("Instruction Preview:"), ctx.code_inline(body)])
-
-            lines.extend(["", ctx.escape_text("💡 發送 Prompt 即刻開始，或輸入 /skills 返回選單。")])
-            msg_text = "\n".join(lines)
-        else:
-            msg_text = "❌ " + ctx.escape_text(f"Skill '/{target_name}' not found. Send /skills to view list.")
+        msg_text, markup = render_skill_detail(sub_arg)
     else:
-        # Layer 1: Page Navigation
         page = int(sub_arg) if (sub_arg and sub_arg.isdigit()) else 1
-        per_page = 10
-        total_pages = (len(skills) + per_page - 1) // per_page
-        page = max(1, min(page, total_pages)) if total_pages > 0 else 1
-
-        start_idx = (page - 1) * per_page
-        page_skills = skills[start_idx : start_idx + per_page]
-
-        lines = ["🧩 " + ctx.bold(f"Installed Skills (Page {page}/{total_pages} - Total {len(skills)})"), ""]
-        bullet = ctx.escape_text("• ")
-
-        for s in page_skills:
-            name = str(s["name"])
-            desc = str(s["description"])
-            user_only = bool(s["user_only"])
-
-            badge_text = "👤 User-only" if user_only else "🤖 Model"
-            badge = ctx.escape_text(f"[{badge_text}]")
-            name_str = ctx.bold(f"/{name}")
-            desc_str = ctx.escape_text(desc)
-
-            lines.append(f"{bullet}{name_str} {badge}\n  {desc_str}")
-
-        lines.extend(["", ctx.bold("📖 頁次切換：")])
-        nav_items = []
-        for p in range(1, total_pages + 1):
-            if p == page:
-                nav_items.append(ctx.bold(f"[{p}]"))
-            else:
-                nav_items.append(f"/skills {p}")
-        lines.append(" ".join(nav_items))
-
-        lines.extend(["", ctx.escape_text("💡 提示：輸入 /skills <名稱> (如 /skills ask-matt) 可查看詳細內容。")])
-        msg_text = "\n\n".join(lines)
+        msg_text, markup = render_skills_page(page)
 
     msg_id = await handler.outbound.queue_send_message(
         incoming.chat_id,
         msg_text,
         fire_and_forget=False,
         message_thread_id=incoming.message_thread_id,
+        reply_markup=markup,
     )
     handler.record_outgoing_message(
         incoming.platform, incoming.chat_id, msg_id, "command"
     )
+
 
 
 

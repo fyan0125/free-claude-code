@@ -132,6 +132,7 @@ class TelegramMessenger:
         reply_to: str | None = None,
         parse_mode: str | None = "MarkdownV2",
         message_thread_id: str | None = None,
+        reply_markup: Any = None,
     ) -> str:
         """Send a Telegram message immediately."""
         app = self._get_application()
@@ -147,6 +148,8 @@ class TelegramMessenger:
             }
             if message_thread_id is not None:
                 kwargs["message_thread_id"] = int(message_thread_id)
+            if reply_markup is not None:
+                kwargs["reply_markup"] = reply_markup
             msg = await app.bot.send_message(**kwargs)
             return str(msg.message_id)
 
@@ -158,6 +161,7 @@ class TelegramMessenger:
         message_id: str,
         text: str,
         parse_mode: str | None = "MarkdownV2",
+        reply_markup: Any = None,
     ) -> None:
         """Edit a Telegram message immediately."""
         app = self._get_application()
@@ -165,14 +169,18 @@ class TelegramMessenger:
             raise RuntimeError("Telegram application or bot not initialized")
 
         async def _do_edit(parse_mode: str | None = parse_mode) -> None:
-            await app.bot.edit_message_text(
-                chat_id=chat_id,
-                message_id=int(message_id),
-                text=text,
-                parse_mode=parse_mode,
-            )
+            kwargs: dict[str, Any] = {
+                "chat_id": chat_id,
+                "message_id": int(message_id),
+                "text": text,
+                "parse_mode": parse_mode,
+            }
+            if reply_markup is not None:
+                kwargs["reply_markup"] = reply_markup
+            await app.bot.edit_message_text(**kwargs)
 
         await self._with_retry(_do_edit, parse_mode=parse_mode)
+
 
     async def delete_message(self, chat_id: str, message_id: str) -> None:
         """Delete a Telegram message immediately."""
