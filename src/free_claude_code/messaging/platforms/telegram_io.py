@@ -245,6 +245,7 @@ class TelegramMessenger:
         parse_mode: str | None = "MarkdownV2",
         fire_and_forget: bool = True,
         message_thread_id: str | None = None,
+        reply_markup: Any = None,
     ) -> str | None:
         """Queue a Telegram send."""
         return await self._outbox.queue_send_message(
@@ -254,6 +255,7 @@ class TelegramMessenger:
             parse_mode,
             fire_and_forget,
             message_thread_id,
+            reply_markup,
         )
 
     async def queue_edit_message(
@@ -263,6 +265,7 @@ class TelegramMessenger:
         text: str,
         parse_mode: str | None = "MarkdownV2",
         fire_and_forget: bool = True,
+        reply_markup: Any = None,
     ) -> None:
         """Queue a Telegram edit."""
         await self._outbox.queue_edit_message(
@@ -271,7 +274,9 @@ class TelegramMessenger:
             text,
             parse_mode,
             fire_and_forget,
+            reply_markup,
         )
+
 
     async def queue_delete_messages(
         self,
